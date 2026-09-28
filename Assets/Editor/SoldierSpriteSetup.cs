@@ -294,6 +294,15 @@ namespace AIGame2D.Editor
             var anim = tempGO.AddComponent<Animator>();
             if (controller != null) anim.runtimeAnimatorController = controller;
 
+            // Anexar o script SoldierController para controle do jogador e máquina de estados
+            var soldierControllerType = Type.GetType("AIGame2D.Player.SoldierController, Assembly-CSharp")
+                ?? TypeCache.GetTypesDerivedFrom<MonoBehaviour>()
+                    .FirstOrDefault(t => t.Name == "SoldierController");
+            if (soldierControllerType != null)
+            {
+                tempGO.AddComponent(soldierControllerType);
+            }
+
             if (!Directory.Exists(AnimationOutputDir))
             {
                 Directory.CreateDirectory(AnimationOutputDir);
@@ -604,6 +613,12 @@ namespace AIGame2D.Editor
             }
 
             controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
+            controller.AddParameter("Shoot", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Punch", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Die", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("IsDead", AnimatorControllerParameterType.Bool);
+
+            // Aliases de compatibilidade em português
             controller.AddParameter("Atirar", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Socar", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Morrer", AnimatorControllerParameterType.Trigger);
@@ -650,9 +665,14 @@ namespace AIGame2D.Editor
 
             // Transições AnyState -> Ações (Tiro, Soco, Morte)
             var anyToShoot = rootStateMachine.AddAnyStateTransition(shootState);
-            anyToShoot.AddCondition(AnimatorConditionMode.If, 0, "Atirar");
+            anyToShoot.AddCondition(AnimatorConditionMode.If, 0, "Shoot");
             anyToShoot.hasExitTime = false;
             anyToShoot.duration = 0f;
+
+            var anyToShootFallback = rootStateMachine.AddAnyStateTransition(shootState);
+            anyToShootFallback.AddCondition(AnimatorConditionMode.If, 0, "Atirar");
+            anyToShootFallback.hasExitTime = false;
+            anyToShootFallback.duration = 0f;
 
             var shootToIdle = shootState.AddTransition(idleState);
             shootToIdle.hasExitTime = true;
@@ -660,9 +680,14 @@ namespace AIGame2D.Editor
             shootToIdle.duration = 0f;
 
             var anyToPunch = rootStateMachine.AddAnyStateTransition(punchState);
-            anyToPunch.AddCondition(AnimatorConditionMode.If, 0, "Socar");
+            anyToPunch.AddCondition(AnimatorConditionMode.If, 0, "Punch");
             anyToPunch.hasExitTime = false;
             anyToPunch.duration = 0f;
+
+            var anyToPunchFallback = rootStateMachine.AddAnyStateTransition(punchState);
+            anyToPunchFallback.AddCondition(AnimatorConditionMode.If, 0, "Socar");
+            anyToPunchFallback.hasExitTime = false;
+            anyToPunchFallback.duration = 0f;
 
             var punchToIdle = punchState.AddTransition(idleState);
             punchToIdle.hasExitTime = true;
@@ -670,9 +695,20 @@ namespace AIGame2D.Editor
             punchToIdle.duration = 0f;
 
             var anyToDeath = rootStateMachine.AddAnyStateTransition(deathState);
-            anyToDeath.AddCondition(AnimatorConditionMode.If, 0, "Morrer");
+            anyToDeath.AddCondition(AnimatorConditionMode.If, 0, "Die");
             anyToDeath.hasExitTime = false;
             anyToDeath.duration = 0f;
+
+            var anyToDeathFallback = rootStateMachine.AddAnyStateTransition(deathState);
+            anyToDeathFallback.AddCondition(AnimatorConditionMode.If, 0, "Morrer");
+            anyToDeathFallback.hasExitTime = false;
+            anyToDeathFallback.duration = 0f;
+
+            // Retorno da morte para Idle caso IsDead seja desmarcado (ex: Respawn)
+            var deathToIdle = deathState.AddTransition(idleState);
+            deathToIdle.AddCondition(AnimatorConditionMode.IfNot, 0, "IsDead");
+            deathToIdle.hasExitTime = false;
+            deathToIdle.duration = 0f;
 
             EditorUtility.SetDirty(controller);
             return controller;
